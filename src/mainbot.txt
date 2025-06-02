@@ -1,0 +1,69 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+
+#define LED 2
+#define SSID "TP-LINK_7076"
+#define PASSWORD "xxxxxxxx"
+#define BOTtoken "7666849132:AAEQL6CJxW8S0LGOkcKexKIYfPjw2PYgUt8"  
+#define CHAT_ID "5939240488"
+#define DELAY 1000
+
+WiFiClientSecure client;
+UniversalTelegramBot bot(BOTtoken, client);
+
+unsigned long lastTimeBotRan;
+
+void handleNewMessages(int numNewMessages) {
+  for (int i=0; i<numNewMessages; i++) {
+    String chat_id = String(bot.messages[i].chat_id);
+    if (chat_id != CHAT_ID){
+      bot.sendMessage(chat_id, "Usuário não autorizado", "");
+      continue;
+    }
+    
+    String text = bot.messages[i].text;
+    String from_name = bot.messages[i].from_name;
+
+    if (text == "/start") {
+      String welcome = "Olá " + from_name + ",\n";
+      welcome += "Use os comandos abaixo para controlar o LED:\n\n";
+      welcome += "/on para ligar o GPIO \n";
+      welcome += "/off para desligar o GPIO \n";
+      bot.sendMessage(chat_id, welcome, "");
+    }
+
+    if (text == "/on") {
+      bot.sendMessage(chat_id, "Ligando LED", "");
+      digitalWrite(LED, HIGH);
+    }
+    
+    if (text == "/off") {
+      bot.sendMessage(chat_id, "Desligando LED", "");
+      digitalWrite(LED, LOW);
+    }
+  }
+}
+
+void setup() {
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, LOW);
+  
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(SSID, PASSWORD);
+
+  client.setCACert(TELEGRAM_CERTIFICATE_ROOT); 
+}
+
+void loop() {
+  if (millis() > lastTimeBotRan + DELAY)  {
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+
+    while(numNewMessages) {
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+    lastTimeBotRan = millis();
+  }
+}
