@@ -14,6 +14,7 @@ String getTimeNow();
 
 String logPathUsers;
 String logPathWater;
+String logPathAcesso;
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
     Serial.printf("Listing directory: %s\r\n", dirname);
@@ -76,6 +77,26 @@ void readFile(fs::FS &fs, const char * path){
     file.close();
 }
 
+void getAuthorizedUsers(fs::FS &fs){
+    char* lista;
+    File file = fs.open(logPathAcesso.c_str());
+    if(!file){
+        Serial.println("- failed to open file for reading");
+        return;
+    }
+    int i = 0;
+    while(file.available()){
+        
+        // lista[i] = file.read();
+        // i++;
+        Serial.write(file.read());
+    }
+    file.close();
+
+    // Serial.println(lista[0]);
+    // Serial.println(lista[1]);
+}
+
 void writeFile(fs::FS &fs, const char * path, const char * message){
     if(fs.exists(path)){
       Serial.printf("file in path %s already exists \n", path);
@@ -105,7 +126,7 @@ String fixLogMessage(const char* message) {
   return String(temp.c_str());  // Retorna uma String válida (do Arduino)
 }
 
-void appendFile(fs::FS &fs, const char * path, const char * message){
+void appendFile(fs::FS &fs, const char * path, const char * message, int flagAddTime = 0){
     if(!fs.exists(path)){
       Serial.printf("file in path %s doesnt exists \n", path);
       return;
@@ -117,12 +138,21 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
         Serial.println("- failed to open file for appending");
         return;
     }
-    
-    if(file.print(fixLogMessage(message))){
-        Serial.println("- message appended");
-    } else {
-        Serial.println("- append failed");
+    if(!flagAddTime){
+        if(file.print(fixLogMessage(message))){
+            Serial.println("- message appended");
+        } else {
+            Serial.println("- append failed");
+        }        
+    }else{
+        if(file.print(message)){
+            Serial.println("- message appended");
+        } else {
+            Serial.println("- append failed");
+        }
     }
+
+
     file.close();
 }
 
@@ -155,6 +185,11 @@ void AddMessageToUsersLog(const char * message){
 void AddMessageToWaterLog(const char * message){
     appendFile(LittleFS, logPathWater.c_str(), message);
 }
+void AddAuthorizedUser(const char * UID){
+    std::string UIDConcat = UID;
+    UIDConcat += "\n";
+    appendFile(LittleFS, logPathAcesso.c_str(),UIDConcat.c_str(), 1);
+}
 
 void ReadUsersLog(){
     readFile(LittleFS, logPathUsers.c_str());
@@ -179,7 +214,7 @@ void setupFS(){
     // Conecta ao Wi-Fi
     WiFi.begin(SSID, PASSWORD);
     while (WiFi.status() != WL_CONNECTED) {
-        delay(100);
+        delay(500);
         Serial.print(".");
     }
     // Configura o tempo via NTP
@@ -194,19 +229,30 @@ void setupFS(){
     
     logPathUsers = "/users/Log_usuario_" + getDateNow() + ".txt";
     logPathWater = "/water/Log_caixa_agua_" + getDateNow() + ".txt";
+    logPathAcesso = "/acesso/cred/acessos_permitidos.txt";
+    
     if(!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)){
         Serial.println("LittleFS Mount Failed");
         return;
     }
-
+    // deleteFile(LittleFS, logPathAcesso.c_str());
     createDir(LittleFS, "/users");
     createDir(LittleFS, "/water");
+    createDir(LittleFS, "/acesso");
+    createDir(LittleFS, "/acesso/cred");
     writeFile(LittleFS, logPathUsers.c_str(), "");
     writeFile(LittleFS, logPathWater.c_str(), "");
+    writeFile(LittleFS, logPathAcesso.c_str(), ""); 
+
+    // AddAuthorizedUser("N1 C2 M3 K4");
+    // AddAuthorizedUser("A1 B2 C3 D4");
+    
     // ReadWaterLog();
     // listDir(LittleFS, "/users", 0);
     // listDir(LittleFS, "/water", 0);
 
     // deleteFile(LittleFS, logPathWater.c_str());
     // deleteFile(LittleFS, logPathUsers.c_str());
+
+    getAuthorizedUsers(LittleFS);
 }
