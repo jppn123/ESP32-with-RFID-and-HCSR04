@@ -291,11 +291,16 @@ void AddMessageToUsersLog(const char * message){
 void AddMessageToWaterLog(const char * message){
     appendFile(LittleFS, logPathWater.c_str(), message, 0);
 }
-void AddAuthorizedUser(const char * UID){
-    std::string UIDConcat = UID;
-    UIDConcat += "\n";
-    flagModificouListaUsuariosAutorizados = 1;
-    appendFile(LittleFS, logPathAcesso.c_str(),UIDConcat.c_str(), 1);
+bool AddAuthorizedUser(const char * UID){
+    bool userExistsInList = UserInAuthorizedList(UID);
+    
+    if (!userExistsInList){
+        std::string UIDConcat = UID;
+        UIDConcat += "\n";
+        flagModificouListaUsuariosAutorizados = 1;
+        appendFile(LittleFS, logPathAcesso.c_str(),UIDConcat.c_str(), 1);
+    }
+    return userExistsInList;
 }
 
 std::vector<String> ReadUsersLog(){

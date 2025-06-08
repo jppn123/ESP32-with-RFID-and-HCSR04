@@ -44,7 +44,7 @@ void handleNewMessages(int numNewMessages) {
 
         welcome += "\nComandos referentes ao controle de usuários local:\n";
         welcome += "/cadastro_local - Cadastrar o cartão por aproximação\n";
-        welcome += "/remoção_local - Remover o cartão por aproximação\n";
+        welcome += "/remocao_local - Remover o cartão por aproximação\n";
         welcome += "/obter_uid - Obter o UID aproximando um cartão válido\n";
 
         welcome += "\nComandos referentes ao controle da caixa de água:\n";
@@ -64,9 +64,11 @@ void handleNewMessages(int numNewMessages) {
         return;
       }
 
-      AddAuthorizedUser(uid.c_str());
-
-      bot.sendMessage(chat_id, "Usuário cadastrado com sucesso", "");
+      if(AddAuthorizedUser(uid.c_str())){
+        bot.sendMessage(chat_id, "Usuário já está autorizado", "");
+      }else{
+        bot.sendMessage(chat_id, "Usuário cadastrado com sucesso", "");
+      }
     }
 
     if (text.startsWith("/remover")) {
@@ -84,13 +86,17 @@ void handleNewMessages(int numNewMessages) {
       while(true){
         if (readRFID(id, idSize)) {
           String uidr = printUID(id, idSize);
-          AddAuthorizedUser(uidr.c_str());
-          bot.sendMessage(chat_id, "Usuário cadastrado com sucesso", "");
+          if(AddAuthorizedUser(uidr.c_str())){
+            bot.sendMessage(chat_id, "Usuário já está autorizado", "");
+          }else{
+            bot.sendMessage(chat_id, "Usuário cadastrado com sucesso", "");
+          }
+          break;
         } 
       }
     }
 
-    if (text.startsWith("/remoção_local")) {
+    if (text.startsWith("/remocao_local")) {
       bot.sendMessage(chat_id, "Aproxime o cartão do leitor", "");
       while(true){
         if (readRFID(id, idSize)) {

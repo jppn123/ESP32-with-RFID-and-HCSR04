@@ -12,7 +12,7 @@ void writeFile(fs::FS &fs, const char * path, const char * message);
 void appendFile(fs::FS &fs, const char * path, const char * message);
 void AddMessageToUsersLog(const char * message);
 void AddMessageToWaterLog(const char * message);
-void AddAuthorizedUser(const char * UID);
+bool AddAuthorizedUser(const char * UID);
 std::vector<String> ReadUsersLog();
 std::vector<String> ReadWaterLog();
 std::vector<String> ReadAuthorizedUsers();
