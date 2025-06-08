@@ -1,15 +1,27 @@
 #include <Arduino.h>
+#include <vector>
 #include "bot.h"
 #include "wifiCred.h"
+#include "fsApp.h"
+#include "rfid.h"
 
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
 unsigned long lastTimeBotRan;
+byte id[10];
+byte idSize;
+
+String validarUid(String uid) {
+  if (uid.length() != 11) {
+    return "O {UID} deve estar no formato XX XX XX XX.";
+  }
+  return uid;
+}
 
 String obterUid(String text, String metodo){
   int index = text.indexOf(metodo) + String(metodo).length() + 1;
   String uid = text.substring(index, text.length());
-  return uid;
+  return validarUid(uid);
 }
 
 void handleNewMessages(int numNewMessages) {
@@ -26,55 +38,151 @@ void handleNewMessages(int numNewMessages) {
     if (text == "/start" || text == "/info") {
         String welcome = "Olá " + from_name + ",\n";
         welcome += "Use os comandos abaixo para controlar o sistema:\n\n";
-        welcome += "Comandos referente ao controle de usuários:\n";
-        welcome += "/cadastrar {UID} para conceder acesso a um usuário\n";
-        welcome += "/remover {UID} para remover acesso de um usuário\n";
-        welcome += "/verificar para obter o UID\n";
+        welcome += "Comandos referentes ao controle de usuários à distância:\n";
+        welcome += "/cadastrar {UID} - Conceder acesso a um usuário usando o UID do cartão\n";
+        welcome += "/remover {UID} - Remover acesso de um usuário usando o UID do cartão\n";
 
-        welcome += "\nComandos referente ao controle da caixa de água:\n";
-        welcome += "/verificar para verificar a medição atual da caixa de água\n";
+        welcome += "\nComandos referentes ao controle de usuários local:\n";
+        welcome += "/cadastro_local - Cadastrar o cartão por aproximação\n";
+        welcome += "/remoção_local - Remover o cartão por aproximação\n";
+        welcome += "/obter_uid - Obter o UID aproximando um cartão válido\n";
+
+        welcome += "\nComandos referentes ao controle da caixa de água:\n";
+        welcome += "/medicao_atual - Verificar a medição atual da caixa de água\n";
         
         welcome += "\nComandos de informação:\n";  
-        welcome += "/info para visualizar todos os comandos possíveis novamente\n";
-        welcome += "/log para visualizar os comandos de logs\n";
+        welcome += "/info - Visualizar todos os comandos principais novamente\n";
+        welcome += "/log - Visualizar os comandos de logs\n";
 
         bot.sendMessage(chat_id, welcome, "");
     }
 
-    if (strstr(text.c_str(), "cadastrar")) {
+    if (text.startsWith("/cadastrar")) {
       String uid = obterUid(text, "cadastrar");
-      //TODO implementar a logica de inserir o cartao na lista de cartoes permitidos
+      if(uid.startsWith("O {UID}")) {
+        bot.sendMessage(chat_id, uid, "");
+        return;
+      }
 
-      Serial.println("text: " + text);
-      Serial.println("uid: " + uid);
-      //bot.sendMessage(chat_id, "Usuário cadastrado com sucesso", "");
+      AddAuthorizedUser(uid.c_str());
+
+      bot.sendMessage(chat_id, "Usuário cadastrado com sucesso", "");
     }
 
-    if (strstr(text.c_str(), "remover")) {
+    if (text.startsWith("/remover")) {
       String uid = obterUid(text, "remover");
-      //TODO implementar a logica de remover o cartao da lista de cartoes permitidos
+      if(uid.startsWith("O {UID}")) {
+        bot.sendMessage(chat_id, uid, "");
+        return;
+      }
       
-      Serial.println("text: " + text);
-      Serial.println("uid: " + uid);
-      //bot.sendMessage(chat_id, "Usuário removido com sucesso", "");
+      bot.sendMessage(chat_id, RemoveAuthUser(uid), "");
+    }
+
+    if (text.startsWith("/cadastro_local")) {
+      bot.sendMessage(chat_id, "Aproxime o cartão do leitor", "");
+      while(true){
+        if (readRFID(id, idSize)) {
+          String uidr = printUID(id, idSize);
+          AddAuthorizedUser(uidr.c_str());
+          bot.sendMessage(chat_id, "Usuário cadastrado com sucesso", "");
+        } 
+      }
+    }
+
+    if (text.startsWith("/remoção_local")) {
+      bot.sendMessage(chat_id, "Aproxime o cartão do leitor", "");
+      while(true){
+        if (readRFID(id, idSize)) {
+          String uidr = printUID(id, idSize);
+          bot.sendMessage(chat_id, RemoveAuthUser(uidr), "");
+          break;
+        } 
+      }
+    }
+
+    if (text.startsWith("/obter_uid")) {
+      bot.sendMessage(chat_id, "Aproxime o cartão do leitor", "");
+      while(true){
+        if (readRFID(id, idSize)) {
+          String uidr = printUID(id, idSize);
+          bot.sendMessage(chat_id, "UID: " + uidr, "");
+          break;
+        } 
+      }
+    }
+
+    if (text.startsWith("/medicao_atual")) {
+      std::vector<String> logWater = ReadWaterLog();
+      String response = "Medição atual da caixa de agua:\n";
+      if (logWater.empty()) {
+        response += "Nenhum log da caixa de agua encontrado.";
+      } else {
+        response += logWater.back() + "\n"; 
+      }
+      
+      bot.sendMessage(chat_id, response, "");
     }
     
-    // if (text == "/on") {
-    //   bot.sendMessage(chat_id, "Ligando LED", "");
-    //   digitalWrite(LED, HIGH);
-    // }
+    if (text == "/log") {
+      String logMessage = "Logs disponíveis:\n";
+      logMessage += "/log_users - Visualizar logs de usuários\n";
+      logMessage += "/log_water - Visualizar logs da caixa d'água\n";
+      logMessage += "/users_auth - Visualizar usuarios autorizados\n";
+      logMessage += "/info - Visualizar todos os comandos principais novamente\n";
+      bot.sendMessage(chat_id, logMessage, "");
+
+    }
+    if (text == "/log_users") {
+      std::vector<String> logUsers = ReadUsersLog();
+      String response = "Logs de usuário do dia:\n";
+      if (logUsers.empty()) {
+        response += "Nenhum log de usuário encontrado.";
+      } else {
+        for (const String& user : logUsers) {
+          response += user + "\n";
+        }
+      }
+      
+      bot.sendMessage(chat_id, response, "");
+    }
     
-    // if (text == "/off") {
-    //   bot.sendMessage(chat_id, "Desligando LED", "");
-    //   digitalWrite(LED, LOW);
-    // }
+    if (text == "/log_water") {
+      std::vector<String> logWater = ReadWaterLog();
+      String response = "Logs da caixa de agua do dia:\n";
+      if (logWater.empty()) {
+        response += "Nenhum log da caixa de agua encontrado.";
+      } else {
+        for (const String& user : logWater) {
+          response += user + "\n";
+        }
+      }
+      
+      bot.sendMessage(chat_id, response, "");
+    }
+
+    if (text == "/users_auth") {
+      std::vector<String> authorizedUsers = ReadAuthorizedUsers();
+      String response = "Usuários autorizados:\n";
+      if (authorizedUsers.empty()) {
+        response += "Nenhum usuário autorizado encontrado.";
+      } else {
+        for (const String& user : authorizedUsers) {
+          response += user + "\n";
+        }
+      }
+      bot.sendMessage(chat_id, response, "");
+    }
   }
 }
 
 void setupBot() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(SSID, PASSWORD);
-
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
   client.setCACert(TELEGRAM_CERTIFICATE_ROOT); 
 }
 

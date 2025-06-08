@@ -15,6 +15,9 @@ String getTimeNow();
 String logPathUsers;
 String logPathWater;
 String logPathAcesso;
+//fazer uma "cache" para não precisar consultar um arquivo sempre que for verificar se o usuário está autorizado
+int flagModificouListaUsuariosAutorizados; 
+std::vector<String> authorizedUsers;
 
 void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
     Serial.printf("Listing directory: %s\r\n", dirname);
@@ -77,24 +80,127 @@ void readFile(fs::FS &fs, const char * path){
     file.close();
 }
 
-void getAuthorizedUsers(fs::FS &fs){
-    char* lista;
+std::vector<String> readFileLines(fs::FS &fs, const char *path) {
+    std::vector<String> lines;
+
+    File file = fs.open(path);
+    if (!file || file.isDirectory()) {
+        Serial.println("- falha ao abrir o arquivo para leitura");
+        return lines;
+    }
+
+    String currentLine = "";
+
+    while (file.available()) {
+        char c = file.read();
+        if (c == '\n') {
+            currentLine.trim();
+            if (currentLine.length() > 0) {
+                lines.push_back(currentLine);
+            }
+            currentLine = "";
+        } else {
+            currentLine += c;
+        }
+    }
+
+    file.close();
+    return lines;
+}
+
+std::vector<String> getAuthorizedUsers(fs::FS &fs) {
+    std::vector<String> authorizedUsers;
     File file = fs.open(logPathAcesso.c_str());
-    if(!file){
+    if (!file) {
         Serial.println("- failed to open file for reading");
-        return;
+        return authorizedUsers;
     }
-    int i = 0;
-    while(file.available()){
-        
-        // lista[i] = file.read();
-        // i++;
-        Serial.write(file.read());
+
+    String currentLine = "";
+
+    while (file.available()) {
+        char c = file.read();
+        if (c == '\n') {
+            currentLine.trim(); // remove espaços e quebras extras
+            if (currentLine.length() > 0) {
+                authorizedUsers.push_back(currentLine);
+            }
+            currentLine = ""; // reinicia para a próxima linha
+        } else {
+            currentLine += c;
+        }
     }
+
     file.close();
 
-    // Serial.println(lista[0]);
-    // Serial.println(lista[1]);
+    return authorizedUsers; // Retorna o vetor de usuários autorizados
+}
+
+bool UserInAuthorizedList(String userToCheck) {
+    if(flagModificouListaUsuariosAutorizados){
+        // Se houve mudança, atualiza a lista de usuários autorizados
+        authorizedUsers = getAuthorizedUsers(LittleFS);
+        flagModificouListaUsuariosAutorizados = 0; // Reseta o flag
+    }
+
+    for (String user : authorizedUsers) {
+        if (user == userToCheck) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+String removeAuthorizedUser(fs::FS &fs, String userToRemove) {
+    File file = fs.open(logPathAcesso.c_str(), "r");
+    if (!file) {
+        Serial.println("- falha ao abrir o arquivo para leitura");
+        return "Houve um erro de Leitura do arquivo";
+    }
+
+    std::vector<String> remainingUsers;
+    bool userFound = false;
+    String currentLine = "";
+
+    // Lê linha por linha e verifica se é o usuário a ser removido
+    while (file.available()) {
+        char c = file.read();
+        if (c == '\n') {
+            currentLine.trim();
+            if (currentLine.length() > 0) {
+                if (currentLine != userToRemove) {
+                    remainingUsers.push_back(currentLine);
+                } else {
+                    userFound = true; // encontramos o usuário, então não adicionamos de volta
+                }
+            }
+            currentLine = "";
+        } else {
+            currentLine += c;
+        }
+    }
+
+    file.close();
+
+    // Se não encontrou o usuário, não reescreve o arquivo
+    if (!userFound) {
+        return "Usuário informado não está presente na lista de autorizados";
+    }
+
+    // Reescreve o arquivo com os usuários restantes
+    file = fs.open(logPathAcesso.c_str(), "w");
+    if (!file) {
+        Serial.println("- falha ao abrir o arquivo para escrita");
+        return "Erro ao salvar o novo arquivo";
+    }
+
+    for (const auto &user : remainingUsers) {
+        file.println(user);
+    }
+    file.close();
+    
+    return "Usuário removido com sucesso";
 }
 
 void writeFile(fs::FS &fs, const char * path, const char * message){
@@ -179,24 +285,34 @@ String getDateNow() {
 }
 
 void AddMessageToUsersLog(const char * message){
-    appendFile(LittleFS, logPathUsers.c_str(), message);
+    appendFile(LittleFS, logPathUsers.c_str(), message, 0);
 }
 
 void AddMessageToWaterLog(const char * message){
-    appendFile(LittleFS, logPathWater.c_str(), message);
+    appendFile(LittleFS, logPathWater.c_str(), message, 0);
 }
 void AddAuthorizedUser(const char * UID){
     std::string UIDConcat = UID;
     UIDConcat += "\n";
+    flagModificouListaUsuariosAutorizados = 1;
     appendFile(LittleFS, logPathAcesso.c_str(),UIDConcat.c_str(), 1);
 }
 
-void ReadUsersLog(){
-    readFile(LittleFS, logPathUsers.c_str());
+std::vector<String> ReadUsersLog(){
+    return readFileLines(LittleFS, logPathUsers.c_str());
 }
 
-void ReadWaterLog(){
-    readFile(LittleFS, logPathWater.c_str());
+std::vector<String> ReadWaterLog(){
+    return readFileLines(LittleFS, logPathWater.c_str());
+}
+
+std::vector<String> ReadAuthorizedUsers(){
+    return getAuthorizedUsers(LittleFS);
+}
+
+String RemoveAuthUser(String userToRemove){
+    flagModificouListaUsuariosAutorizados = 1;
+    return removeAuthorizedUser(LittleFS, userToRemove);
 }
 
 void deleteFile(fs::FS &fs, const char * path){
@@ -243,7 +359,7 @@ void setupFS(){
     writeFile(LittleFS, logPathUsers.c_str(), "");
     writeFile(LittleFS, logPathWater.c_str(), "");
     writeFile(LittleFS, logPathAcesso.c_str(), ""); 
-
+    authorizedUsers = getAuthorizedUsers(LittleFS);
     // AddAuthorizedUser("N1 C2 M3 K4");
     // AddAuthorizedUser("A1 B2 C3 D4");
     
@@ -254,5 +370,5 @@ void setupFS(){
     // deleteFile(LittleFS, logPathWater.c_str());
     // deleteFile(LittleFS, logPathUsers.c_str());
 
-    getAuthorizedUsers(LittleFS);
+    //getAuthorizedUsers(LittleFS);
 }

@@ -15,6 +15,7 @@ byte uidSize;
 void sensorTask(void* parameter);
 void resetAcessoTask(void* parameter);
 void simulaAcesso(bool vermelhoLigado, bool verdeLigado, bool releLigado);
+TaskHandle_t resetAcessoHandle = NULL;
 
 void setup() {
     Serial.begin(115200);
@@ -41,13 +42,18 @@ void loop() {
     if (readRFID(uid, uidSize)) {
         String uidr = printUID(uid, uidSize);
         Serial.println(uidr);
-        if(uidr == "43 75 3D 21"){
+        if(UserInAuthorizedList(uidr)){
             Serial.println("autorizado");
             AddMessageToUsersLog("usuario autorizado");
             simulaAcesso(false, true, false);
 
+            if (resetAcessoHandle != NULL) {
+              vTaskDelete(resetAcessoHandle);
+              resetAcessoHandle = NULL;
+            }
+
             //remover o acesso após 20 segundos
-            xTaskCreate(resetAcessoTask, "ResetAcesso", 2048, NULL, 1, NULL);
+            xTaskCreate(resetAcessoTask, "ResetAcesso", 2048, NULL, 1, &resetAcessoHandle);
         }else{
             Serial.println("nao autorizado");
             AddMessageToUsersLog("usuario nao autorizado");
@@ -56,9 +62,6 @@ void loop() {
         delay(500);
     }
     comunicateToBot();
-    //ReadUsersLog();
-    //delay(1000);
-    //ReadWaterLog();
 }
 
 //sensor distancia
@@ -73,8 +76,8 @@ void sensorTask(void* parameter) {
 void resetAcessoTask(void* parameter) {
   vTaskDelay(20000 / portTICK_PERIOD_MS);
 
-  simulaAcesso(true, false, true);
-
+  simulaAcesso(true, false, true);  // Desliga relé e LEDs
+  resetAcessoHandle = NULL;         // Marca como finalizada
   vTaskDelete(NULL);
 }
 

@@ -5,9 +5,9 @@
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 
-#define BOTtoken "7666849132:AAEQL6CJxW8S0LGOkcKexKIYfPjw2PYgUt8"  
-#define CHAT_ID "5939240488"
-#define DELAY 1000
+#define BOTtoken "8105368493:AAENsDUCdCiR7kQc3flK6qZG-1OkZ0-ijRg"  
+#define CHAT_ID "1546484802"
+#define DELAY 500
 
 void comunicateToBot();
 void setupBot();
